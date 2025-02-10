@@ -1,5 +1,7 @@
 ### 克隆项目到本地
 
+`git clone`
+
 ```
 git clone https://github.com/kravenXue/my_solana.git
 ```
@@ -22,9 +24,7 @@ git config --global http.sslVerify true
 
 ### 添加文件到 commit
 
-```
-git add [待提交文件]
-```
+`git add`
 
 **example：**
 

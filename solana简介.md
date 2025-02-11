@@ -27,5 +27,5 @@
 
 ### Solana 的 DApp
 
-solana 的 DApp 是由 链上程序 + 客户端 组成
+- solana 的 DApp 是由 链上程序 + 客户端 组成
 

@@ -58,4 +58,88 @@ avm 允许你在系统上安装和管理不同版本的 Anchor
   anchor --version
   ```
 
+- solana 还需要 node.js 和 yarn 环境
+
+- Node.js 安装
+
+  - 通过 nvm 来安装 node.js
+
+  - 先安装 nvm
+
+    ```
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+    ```
+
+  - 可能遇到 SSL 认证报错
+
+    ```
+    curl: (60) SSL certificate problem: unable to get local issuer certificate
+    ```
+
+  - 添加 -k 参数临时规避 SSL 证书认证
+
+    ```
+    curl -k -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+    ```
+
+    - 依旧报错
+
+      ```
+      fatal: unable to access 'https://github.com/nvm-sh/nvm.git/': server certificate verification failed.
+      ```
+
+    - 确保网络环境安全下，临时禁用 git 的 SSL 认证
+
+      ```
+      git config --global http.sslVerify false
+      ```
+
+    - 后重新执行安装命令
+
+      ```
+      curl -k -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+      ```
+
+    - 安装后重新开启 git 的 SSL 认证
+
+      ```
+      git config --global http.sslVerify true
+      ```
+
+  - 重启 terminal
+
+  - 检查 nvm 是否安装成功
+
+    ```
+    command -v nvm
+    ```
+
+  - nvm 安装 node.js
+
+    ```
+    nvm install node
+    ```
+
+  - node.js 检查
+
+    ```
+    node --version
+    ```
+
+- yarn 安装
+
+  - 安装命令
+
+    ```
+    npm install --global yarn
+    ```
+
+  - yarn 检查
+
+    ```
+    yarn --version
+    ```
+
+    
+
   

@@ -1,3 +1,5 @@
+Web3 学习资料参考来自：https://www.hackquest.io/
+
 # 1 Web3 基础知识
 
 ## Unit1 - Web3 概述

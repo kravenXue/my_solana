@@ -136,9 +136,9 @@ pub fn process_instruction(...) -> ProgramResult{
 
 - **`&account.data`**：获取账户的数据字段的引用。在 Solana 中，账户的数据字段 **`data`** 存储着与账户关联的实际数据，对于程序账户而言，它是程序的二进制内容，对于数据账户而言，它就是存储的数据。
 
-- **`borrow()`**：使用该方法获取data数据字段的可借用引用。并通过 **`&account.data.borrow()`** 方式得到账户数据字段的引用。
+- **`borrow()`**：使用该方法获取data数据字段的不可变引用。并通过 **`&account.data.borrow()`** 方式得到账户数据字段的不可变引用。
 
-- **`CounterAccount::try_from_slice(...)`**：调用 ==try_from_slice== 方法，它是 **`BorshDeserializetrait`**  的一个方法，==用于从字节序列中反序列化出一个结构体的实例==。这里 **`CounterAccount`** 实现了 **`BorshDeserialize`**，所以可以使用这个方法。
+- **`CounterAccount::try_from_slice(...)`**：调用 ==try_from_slice== 方法，它是 **`BorshDeserializetrait`**  的一个方法，==用于从字节序列中反序列化出一个结构体的实例==。这里 **`CounterAccount`** 实现了 **`BorshDeserialize`** ，所以可以使用这个方法。
 
 - **`?`**：是一个错误处理操作符，如果 **`try_from_slice`** 返回错误，整个表达式将提前返回，将错误传播给调用方。
 
@@ -159,7 +159,7 @@ pub fn process_instruction(...) -> ProgramResult{
     // counter 的 count 计数 +1
     counter.count +=1;
     // 序列化 counter 为字节数组 并写入 数据账户的 data
-    counter.serialize(&mut *account.data.borrow())?;
+    counter.serialize(&mut *account.data.borrow_mut())?;
     Ok(())
 }
 ```

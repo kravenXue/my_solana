@@ -1,16 +1,21 @@
-use solana_program::{account_info::next_account_info, entrypoint}; 
+use solana_program::entrypoint;
 // 我们需要的 entrypoint! 是个宏，
-// 所以声明时最好单独提取出来，不然和下方的声明在一起为 
-// use solana_program::entrypoint{self,ProgramResult} 的话会报错
+// 使用 codeformat 时可能会变成下方这种，会报错
+// use solana_program::entrypoint{self, ProgramResult}
+// 需要写成以下这种
+// use solana_program::{entrypoint, entrypoint::ProgramResult}
 
-use solana_program::entrypoint::ProgramResult; 
+use solana_program::account_info::next_account_info;
+// 消耗型迭代器，获取 accounts 下一个 account
+
+use solana_program::entrypoint::ProgramResult;
 // ProgramResult 是 solana 中定义的一个通用错误处理类型，可以用于入口函数的返回类型
 // 成功返回 ()，失败返回 ProgramError；ProgramError也是个枚举
 
-use solana_program::program_error::ProgramError; 
+use solana_program::program_error::ProgramError;
 // ProgramError 中定义了 23 种常见的错误原因枚举值，也支持自定义的错误类型
 
-use solana_program::account_info::AccountInfo; 
+use solana_program::account_info::AccountInfo;
 // account_info 模块中的一个结构体，允许我们访问帐户信息
 
 use solana_program::pubkey::Pubkey;
@@ -43,13 +48,13 @@ fn process_instruction(
     let accounts_iter = &mut accounts.iter();
     let account = next_account_info(accounts_iter)?;
     // 判断账户权限
-    if account.owner != program_id{
+    if account.owner != program_id {
         msg!("account 的所有者不属于当前 program_id");
         return Err(ProgramError::IncorrectProgramId);
     }
     // 反序列化读取 account 结构体实例信息
     let mut counter = CounterAccount::try_from_slice(&account.data.borrow())?;
-    counter.count +=1;
+    counter.count += 1;
     counter.serialize(&mut *account.data.borrow_mut())?;
     Ok(())
 }

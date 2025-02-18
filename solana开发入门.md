@@ -173,3 +173,378 @@ pub fn process_instruction(...) -> ProgramResult{
 - **`?`**：是一个错误处理操作符，如果 **`serialize`** 方法返回错误，整个表达式将提前返回，将错误传播给调用方。
 
 通过如上的方式，将 **`CounterAccount`** 结构体中的修改后的值递增，并将更新后的结构体序列化为字节数组，然后写入 Solana 账户的可变数据字段中。实现了在 Solana 程序中对计数器值进行更新和存储。
+
+### 构建部署到 devnet
+
+当前使用的是 [Solana Playground | Solana IDE](https://beta.solpg.io/) 网站进行构建部署
+
+Build 代码成功后，执行 Deploy
+
+![image-20250218184441563](./assets/image-20250218184441563.png)
+
+此处可以看到当前部署的程序 id
+
+再使用该 program id 去 [solana区块链网站](https://explorer.solana.com/?cluster=devnet) 上搜索，就可以查询到该程序部署的信息
+
+![image-20250218184849437](./assets/image-20250218184849437.png)
+
+最下方的交易历史点开可以查看具体部署的详情
+
+![image-20250218185205764](./assets/image-20250218185205764.png)
+
+![image-20250218185808671](./assets/image-20250218185808671.png)
+
+### 测试脚本调试该 solana 程序
+
+#### 首次调试
+
+测试脚本主要做了以下几件事
+
+##### 创建计数器对象
+
+```js
+/**
+ * CounterAccount 对象
+ */
+class CounterAccount {
+  count = 0;
+  constructor(fields: { count: number } | undefined = undefined) {
+    if (fields) {
+      this.count = fields.count;
+    }
+  }
+}
+
+/**
+ * CounterAccount 对象 schema 定义
+ */
+const CounterAccountSchema = new Map([
+  [CounterAccount, { kind: "struct", fields: [["count", "u32"]] }],
+]);
+
+/**
+ * 账户空间大小
+ */
+const GREETING_SIZE = borsh.serialize(
+  CounterAccountSchema,
+  new CounterAccount()
+).length;
+```
+
+这里定义了一个 **`CounterAccount`** 类，并使用构造函数初始化对象实例。创建了一个 **`CounterAccountSchema`** 对象，该对象定义了 **`CounterAccount`** 类的序列化规则。接下来计算了序列化一个 **`CounterAccount`** 对象所需的字节数 **`GREETING_SIZE`**，这个值将用于后续创建账户时确定账户空间的大小
+
+##### 创建数据账户的指令
+
+```js
+describe("Test", () => {
+  it("greet", async () => {
+    // 创建 keypair
+    const counterAccountKp = new web3.Keypair();
+    console.log(`counterAccountKp.publickey : ${counterAccountKp.publicKey}`)
+    const lamports = await pg.connection.getMinimumBalanceForRentExemption(
+      GREETING_SIZE
+    );
+
+    // 创建生成对应数据账户的指令
+    const createGreetingAccountIx = web3.SystemProgram.createAccount({
+      fromPubkey: pg.wallet.publicKey,
+      lamports,
+      newAccountPubkey: counterAccountKp.publicKey,
+      programId: pg.PROGRAM_ID,
+      space: GREETING_SIZE,
+    });
+
+
+    // ...
+  });
+});
+```
+
+- 创建了一个新的 Solana Keypair (**`counterAccountKp`**) 用于存储计数器的状态。
+
+- 使用 Solana API 获取在链上创建相应账户所需的最小 lamports，即 Solana 链上存储该账户所要支付的最小押金 **`rent`**。
+
+- 构建 **`createGreetingAccountIx`** 指令，在链上创建我们指定的 **`counterAccountKp.publicKey`** 账户，并指定了账户的大小。
+
+##### 调用 solana 程序的指令
+
+接下来我们创建如下指令，调用之前部署的 Solana 程序，并传入对应的数据账户 **`counterAccountKp.publicKey`**来存储计数器状态，计数器程序会在该账户 data 的基础上累加，因此计数器从初始值 0 变为 1
+
+```js
+describe("Test", () => {
+  it("greet", async () => {
+    // 创建 keypair
+    // 创建生成对应数据账户的指令
+    
+    // 调用程序的指令,计数器累加
+    const greetIx = new web3.TransactionInstruction({
+      keys: [
+        {
+          pubkey: counterAccountKp.publicKey,
+          isSigner: false,
+          isWritable: true,
+        },
+      ],
+      programId: pg.PROGRAM_ID,
+    });
+	// ...
+  });
+});
+```
+
+##### 创建交易发送上面两个指令
+
+```js
+describe("Test", () => {
+  it("greet", async () => {
+    // 创建 keypair
+    // 创建生成对应数据账户的指令
+    // 调用程序的指令,计数器累加
+
+    // 创建交易，包含如上2个指令
+    const tx = new web3.Transaction();
+    tx.add(createGreetingAccountIx, greetIx);
+    // 发起交易，获取交易哈希
+    const txHash = await web3.sendAndConfirmTransaction(pg.connection, tx, [
+      pg.wallet.keypair,
+      counterAccountKp,
+    ]);
+    console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);
+
+    // ...
+  });
+});
+```
+
+##### 查看程序执行结果
+
+调用 **`getAccountInfo`**函数获取指定地址的数据，通过反序列化就可以把二进制数据转换成我们的计数器对象，此时它的值为 1
+
+```js
+describe("Test", () => {
+  it("greet", async () => {
+    // 创建 keypair
+    // 创建生成对应数据账户的指令
+    // 调用程序的指令,计数器累加
+    // 创建交易，包含如上2个指令
+      
+    // 获取指定数据账户的信息
+    const counterAccountOnSolana = await pg.connection.getAccountInfo(
+      counterAccountKp.publicKey
+    );
+    // 反序列化
+    const deserializedAccountData = borsh.deserialize(
+      CounterAccountSchema,
+      CounterAccount,
+      counterAccountOnSolana.data
+    );
+    // 判断当前计数器是否累加
+    assert.equal(deserializedAccountData.count, 1);
+  });
+});
+```
+
+##### 完整代码
+
+```js
+// No imports needed: web3, borsh, pg and more are globally available
+
+/**
+ * CounterAccount 对象
+ */
+class CounterAccount {
+  count = 0;
+  constructor(fields: { count: number } | undefined = undefined) {
+    if (fields) {
+      this.count = fields.count;
+    }
+  }
+}
+
+/**
+ * CounterAccount 对象 schema 定义
+ */
+const CounterAccountSchema = new Map([
+  [CounterAccount, { kind: "struct", fields: [["count", "u32"]] }],
+]);
+
+/**
+ * 账户空间大小
+ */
+const GREETING_SIZE = borsh.serialize(
+  CounterAccountSchema,
+  new CounterAccount()
+).length;
+
+describe("Test", () => {
+  it("greet", async () => {
+    // 创建 keypair
+    const counterAccountKp = new web3.Keypair();
+    console.log(`counterAccountKp.publickey : ${counterAccountKp.publicKey}`)
+    const lamports = await pg.connection.getMinimumBalanceForRentExemption(
+      GREETING_SIZE
+    );
+
+    // 创建生成对应数据账户的指令
+    const createGreetingAccountIx = web3.SystemProgram.createAccount({
+      fromPubkey: pg.wallet.publicKey,
+      lamports,
+      newAccountPubkey: counterAccountKp.publicKey,
+      programId: pg.PROGRAM_ID,
+      space: GREETING_SIZE,
+    });
+
+
+    // 调用程序,计数器累加
+    const greetIx = new web3.TransactionInstruction({
+      keys: [
+        {
+          pubkey: counterAccountKp.publicKey,
+          isSigner: false,
+          isWritable: true,
+        },
+      ],
+      programId: pg.PROGRAM_ID,
+    });
+
+    // 创建交易，包含如上2个指令
+    const tx = new web3.Transaction();
+    tx.add(createGreetingAccountIx, greetIx);
+
+    // 发起交易，获取交易哈希
+    const txHash = await web3.sendAndConfirmTransaction(pg.connection, tx, [
+      pg.wallet.keypair,
+      counterAccountKp,
+    ]);
+    console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);
+
+    // 获取指定数据账户的信息
+    const counterAccountOnSolana = await pg.connection.getAccountInfo(
+      counterAccountKp.publicKey
+    );
+
+    // 反序列化
+    const deserializedAccountData = borsh.deserialize(
+      CounterAccountSchema,
+      CounterAccount,
+      counterAccountOnSolana.data
+    );
+
+    // 判断当前计数器是否累加
+    assert.equal(deserializedAccountData.count, 1);
+  });
+});
+```
+
+#### 调试优化
+
+##### 如何在同一个账户上累加
+
+上方代码每次调用都是创建一个新的账户，并且只能把它的值更新成1
+
+怎么实现在同一个账户上一直累加：
+
+```js
+import { PublicKey } from '@solana/web3.js';
+
+const counterAccountPk = new PublicKey("3EsU9Tg8V186EEaPvfdYmrof996soBNBk8ivbsAxsM6w")// 上次调用创建的账户的公钥填入这里
+```
+
+这里引入 **`PublicKey`** 依赖，并根据字符串格式的公钥，创建 Publickey 对象
+
+同时移除上一节的创建账户逻辑，只保留调用程序的指令逻辑，如下：
+
+```js
+const greetIx = new web3.TransactionInstruction({
+  keys: [
+    {
+      pubkey: counterAccountPk,
+      isSigner: false,
+      isWritable: true,
+    },
+  ],
+  programId: pg.PROGRAM_ID,
+});
+```
+
+这样后续创建交易发送指令的时候只用发送一个指令
+
+```js
+// 创建交易
+const tx = new web3.Transaction();
+tx.add(greetIx); // 指令集里现在就只需要调用的指令了
+// 发起交易，获取交易哈希
+const txHash = await web3.sendAndConfirmTransaction(pg.connection, tx, [
+  pg.wallet.keypair,
+]);
+```
+
+##### 完整代码
+
+```js
+// No imports needed: web3, borsh, pg and more are globally available
+import { PublicKey } from '@solana/web3.js';
+
+/**
+ * CounterAccount 对象
+ */
+class CounterAccount {
+  count = 0;
+  constructor(fields: { count: number } | undefined = undefined) {
+    if (fields) {
+      this.count = fields.count;
+    }
+  }
+}
+
+/**
+ * CounterAccount 对象 schema 定义
+ */
+const CounterAccountSchema = new Map([
+  [CounterAccount, { kind: "struct", fields: [["count", "u32"]] }],
+]);
+
+describe("Test", () => {
+  it("greet", async () => {
+
+    const counterAccountPk = new PublicKey("3EsU9Tg8V186EEaPvfdYmrof996soBNBk8ivbsAxsM6w")
+    // 调用程序,计数器累加
+    const greetIx = new web3.TransactionInstruction({
+      keys: [
+        {
+          pubkey: counterAccountPk,
+          isSigner: false,
+          isWritable: true,
+        },
+      ],
+      programId: pg.PROGRAM_ID,
+    });
+
+    // 创建交易
+    const tx = new web3.Transaction();
+    tx.add(greetIx);
+
+    // 发起交易，获取交易哈希
+    const txHash = await web3.sendAndConfirmTransaction(pg.connection, tx, [
+      pg.wallet.keypair,
+    ]);
+    console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);
+
+    // 获取指定数据账户的信息
+    const counterAccountOnSolana = await pg.connection.getAccountInfo(
+      counterAccountPk
+    );
+
+    // 反序列化
+    const deserializedAccountData = borsh.deserialize(
+      CounterAccountSchema,
+      CounterAccount,
+      counterAccountOnSolana.data
+    );
+
+    // 判断当前计数器是否累加
+    assert.equal(deserializedAccountData.count, 4);
+  });
+});
+```
+

@@ -305,7 +305,7 @@ pub struct InitializeAccounts<'info> {
 
 ## Anchor 的程序结构 Accounts
 
-### 示例代码
+### 示例完整代码
 
 ```rust
 // 引入 anchor 框架的预导入模块
@@ -385,9 +385,9 @@ pub struct InitializeAccounts<'info> {
 
 ### #[derive(Accounts)] 宏的介绍
 
-该宏应用于指令所要求的账户列表，实现了给定 struct 结构体数据的反序列化功能，**因此在获取账户时不再需要手动迭代账户以及反序列化操作，并且实现了账户满足程序安全运行所需要的安全检查**，当然，需要#[account]宏配合使用
+该宏应用于指令所要求的账户列表，实现了给定 struct 结构体数据的反序列化功能，**因此在获取账户时不再需要手动迭代账户以及反序列化操作，并且实现了账户满足程序安全运行所需要的安全检查**，当然，需要 **`#[account]`** 宏配合使用
 
-- 1.下面我们看下示例中的InitializeAccounts结构体，当initialize指令函数被调用时，程序会做如下2个校验：
+- 1.下面我们看下示例中的 InitializeAccounts 结构体，当 initialize 指令函数被调用时，程序会做如下2个校验：
 
   ```rust
   #[derive(Accounts)]
@@ -433,3 +433,236 @@ pub struct InitializeAccounts<'info> {
   这里，只是对 **`#[derive(Accounts)]`** 中的账户的类型进行了介绍，其实每个字段还有 **`#[account(..)]`** 属性宏
 
   总的来说，**`#[derive(Accounts)]`** 是 Anchor 框架的宏，简化 Solana 程序中的账户处理代码。通过结构体属性标注，自动生成账户操作逻辑，提高可读性和可维护性，使开发者更专注于业务逻辑
+  
+  更多的账户类型： [这里](https://docs.rs/anchor-lang/latest/anchor_lang/accounts/index.html)
+
+## Anchor 的程序结构 account
+
+### 在账户集合中的账户属性约束：#[account(..)]
+
+#### 示例完整代码
+
+```rust
+// 引入 anchor 框架的预导入模块
+use anchor_lang::prelude::*;
+
+// 程序的链上地址
+declare_id!("3Vg9yrVTKRjKL9QaBWsZq4w7UsePHAttuZDbrZK3G5pf");
+
+// 指令处理逻辑
+#[program]
+mod anchor_counter {
+    use super::*;
+    pub fn initialize(ctx: Context<InitializeAccounts>, instruction_data: u64) -> Result<()> {
+        ctx.accounts.counter.count = instruction_data;
+        Ok(())
+    }
+
+    pub fn increment(ctx: Context<UpdateAccounts>) -> Result<()> {
+        let counter = &mut ctx.accounts.counter;
+        msg!("Previous counter: {}", counter.count);
+        counter.count = counter.count.checked_add(1).unwrap();
+        msg!("Counter incremented. Current count: {}", counter.count);
+        Ok(())
+    }
+}
+
+// 指令涉及的账户集合
+#[derive(Accounts)]
+#[instruction(instruction_data: String)]
+pub struct InitializeAccounts<'info> {
+    #[account(
+			init, 
+			seeds = [b"my_seed", user.key.to_bytes().as_ref(), instruction_data.as_ref()], 
+			payer = user, 
+			space = 8 + 8)]
+    pub counter: Account<'info, Counter>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateAccounts<'info> {
+    #[account(mut)]
+    pub counter: Account<'info, Counter>,
+    pub user: Signer<'info>,
+}
+
+// 自定义账户类型
+#[account]
+pub struct Counter {
+    count: u64
+}
+```
+
+#### 账户属性约束的 #[account(..)]
+
+```rust
+#[derive(Accounts)]
+struct ExampleAccounts {
+  #[account(
+    seeds = [b"example_seed"],
+    bump
+  )]
+  pub pda_account: Account<'info, AccountType>,
+  
+	#[account(mut)]
+  pub user: Signer<'info>,
+}
+```
+
+#### **#[account(..)]** **宏的介绍**
+
+它是 Anchor 框架中的一个属性宏，提供了一种声明式的方式来指定账户的初始化、权限、空间（占用字节数）、是否可变等属性，从而简化了与 Solana 程序交互的代码。也可以看成是一种账户属性约束
+
+- **初始化一个派生账户地址 PDA ：**它是根据 seeds、program_id 以及 bump 动态计算而来的，其中的 bump 是程序在计算地址时自动生成的一个值（Anchor 默认使用符合条件的第一个 bump 值），不需要我们手动指定
+
+  ```
+  #[account(
+  	init, 
+  	seeds = [b"my_seed"], 
+  	bump,
+  	payer = user, 
+  	space = 8 + 8
+  )]
+  pub pda_counter: Account<'info, Counter>,
+  pub user: Signer<'info>,
+  ```
+
+  - **init**：Anchor 会通过相关属性配置初始化一个派生帐户地址 PDA
+
+  - **seeds**：种子（seeds）是一个任意长度的字节数组，通常包含了派生账户地址 PDA 所需的信息，在这个例子中我们仅使用了字符串 **`my_seed`** 作为种子。当然，也可以包含其他信息：如指令账户集合中的其他字段 **`user`**、指令函数中的参数 **`instruction_data`**，示意代码如下：
+
+    ```rust
+    #[derive(Accounts)]
+    #[instruction(instruction_data: String)]
+    pub struct InitializeAccounts<'info> {
+    		#[account(
+    			init, 
+    			seeds = [b"my_seed", 
+    							 user.key.to_bytes().as_ref(),
+    							 instruction_data.as_ref()
+    							]
+    			bump,
+    			payer = user, 
+    			space = 8 + 8
+    		)]
+    		pub pda_counter: Account<'info, Counter>,
+    		pub user: Signer<'info>,
+    }
+    ```
+
+  - **payer**：指定了支付账户，即进行账户初始化时，使用 **`user`** 这个账户支付交易费用
+
+  - **space**：定账户的空间大小为16个字节，前 8 个字节存储 Anchor 自动添加的鉴别器，用于识别帐户类型。接下来的 8 个字节为存储在 **`Counter`** 帐户类型中的数据分配空间（**`count`** 为 u64 类型，占用 8 字节）
+
+- **验证派生地址 PDA**：有些时候我们需要在调用指令函数时，验证传入的 PDA 地址是否正确，也可以采用类似的方式，只需要传入对应的 **`seeds`** 和 **`bump`** 即可，Anchor 就会按照此规则并结合 **`program_id`** 来计算 PDA 地址，完成验证工作。注意：这里不需要 **`init`** 属性
+
+  ```rust
+  #[derive(Accounts)]
+  #[instruction(instruction_data: String)]
+  pub struct InitializeAccounts<'info> {
+  		#[account(
+  			seeds = [b"my_seed", 
+  							 user.key.to_bytes().as_ref(),
+  							 instruction_data.as_ref()
+  							]
+  			bump
+  		)]
+  		pub pda_counter: Account<'info, Counter>,
+  		pub user: Signer<'info>,
+  }
+  ```
+
+- **`#[account(mut)]` 属性约束：**
+
+  - **mut**：表示这是一个可变账户，即在程序的执行过程中，这个账户的数据（包括余额）可能会发生变化。在Solana 程序中，对账户进行写操作需要将其标记为可变
+
+- 以上是我们常用的属性约束，Anchor 为我们提供了许多这样的属性约束，可以看 [这里](https://docs.rs/anchor-lang/latest/anchor_lang/derive.Accounts.html)
+
+总的来说，**`#[account(..)]`** 宏在 Solana 的 Anchor 框架中用于声明性地配置账户属性。通过宏中的参数，开发者可以指定账户是否可初始化、是否可变、是否需要签名、支付者、存储空间大小等，更重要的是，通过 **`seeds`** 属性，可以方便地生成程序派生账户（PDA），将种子信息与程序 ID 结合动态计算账户地址。这使得代码更加清晰、易读，并帮助开发者遵循 Solana 的账户规范，提高了程序的可维护性和可读性
+
+### 在数据账户结构体上的 #[account] 宏
+
+#### 示例完整代码
+
+```rust
+// 引入 anchor 框架的预导入模块
+use anchor_lang::prelude::*;
+
+// 程序的链上地址
+declare_id!("3Vg9yrVTKRjKL9QaBWsZq4w7UsePHAttuZDbrZK3G5pf");
+
+// 指令处理逻辑
+#[program]
+mod anchor_counter {
+    use super::*;
+    pub fn initialize(ctx: Context<InitializeAccounts>, instruction_data: u64) -> Result<()> {
+        ctx.accounts.counter.count = instruction_data;
+        Ok(())
+    }
+
+    pub fn increment(ctx: Context<UpdateAccounts>) -> Result<()> {
+        let counter = &mut ctx.accounts.counter;
+        msg!("Previous counter: {}", counter.count);
+        counter.count = counter.count.checked_add(1).unwrap();
+        msg!("Counter incremented. Current count: {}", counter.count);
+        Ok(())
+    }
+}
+
+// 指令涉及的账户集合
+#[derive(Accounts)]
+pub struct InitializeAccounts<'info> {
+    #[account(init, seeds = [b"my_seed", user.key.to_bytes().as_ref()], payer = user, space = 8 + 8)]
+    pub counter: Account<'info, Counter>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateAccounts<'info> {
+    #[account(mut)]
+    pub counter: Account<'info, Counter>,
+    pub user: Signer<'info>,
+}
+
+// 自定义账户类型
+#[account]
+pub struct Counter {
+    count: u64
+}
+```
+
+#### 数据账户结构体上的 #[account]宏
+
+```rust
+#[derive(Accounts)]
+pub struct InstructionAccounts {
+		// 账户属性约束
+    #[account(init, seeds = [b"mySeeds"], payer = user, space = 8 + 8)]
+    pub account_name: Account<'info, MyAccount >,
+    ...
+}
+
+// 账户结构体上的 #[account] 宏
+#[account]
+pub struct MyAccount {
+    pub my_data: u64,
+}
+```
+
+#### **#[account]** **宏的介绍**
+
+Anchor 框架中，**`#[account]`**宏是一种特殊的宏，它用于处理账户的**（反）序列化**、**账户识别器、所有权验证**。这个宏大大简化了程序的开发过程，使开发者可以更专注于业务逻辑而不是底层的账户处理。它主要实现了以下几个 Trait 特征：
+
+- **（反）序列化**：Anchor框架会自动为使用 #[account] 标记的结构体实现序列化和反序列化。这是因为 Solana 账户需要将数据序列化为字节数组以便在网络上传输，同时在接收方需要将这些字节数组反序列化为合适的数据结构进行处理。
+
+- **Discriminator（账户识别器）**：它是帐户类型的 8 字节唯一标识符，源自帐户类型名称 SHA256 哈希值的前 8 个字节。在实现帐户序列化特征时，前 8 个字节被保留用于帐户鉴别器。因此，在对数据反序列化时，就会验证传入账户的前8个字节，如果跟定义的不匹配，则是无效账户，账户反序列化失败。
+
+- **Owner（所有权校验）**：使用 #[account] 标记的结构体所对应的 Solana 账户的所有权属于程序本身，也就是在程序的 **declare_id!** 宏中声明的程序ID。上面代码中 **`MyAccount`** 账户的所有权为程序本身
+
+
+
